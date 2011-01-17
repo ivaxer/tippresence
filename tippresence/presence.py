@@ -6,7 +6,7 @@ import utils
 
 from twisted.internet import reactor, defer
 
-from tipsip import stats
+from tippresence import stats
 
 def aggregate_status(statuses):
     max_priority = None

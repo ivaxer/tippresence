@@ -5,7 +5,7 @@ import json
 from twisted.internet import defer
 from twisted.web import resource
 
-from tipsip import stats
+from tippresence import stats
 
 class HTTPStats(resource.Resource):
     isLeaf = True

@@ -2,13 +2,13 @@ from twisted.application import service, internet
 from twisted.web import resource, server
 from twisted.internet import defer
 
-from tipsip import PresenceService
-from tipsip import MemoryStorage
-from tipsip.sip import Address, UDPTransport
-from tipsip.sip.presence import SIPPresence
-from tipsip.sip import DialogStore, Dialog
+from tippresence import PresenceService
+from tipsip.storage import MemoryStorage
+from tipsip.transport import Address, UDPTransport
+from tipsip.dialog import DialogStore, Dialog
 
-from tipsip.http import HTTPStats, HTTPPresence
+from tippresence.http import HTTPStats, HTTPPresence
+from tippresence.sip import SIPPresence
 
 storage = MemoryStorage()
 

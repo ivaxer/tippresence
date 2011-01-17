@@ -3,7 +3,8 @@ from twisted.internet import reactor, defer
 
 import json
 
-from tipsip import PresenceService, MemoryStorage
+from tipsip import MemoryStorage
+from tippresence import PresenceService
 
 class PresenceServerTest(unittest.TestCase):
     def setUp(self):

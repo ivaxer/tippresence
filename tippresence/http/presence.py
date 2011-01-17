@@ -5,8 +5,8 @@ import json
 from twisted.internet import defer
 from twisted.web import resource, server
 
-from tipsip import stats
-from tipsip import aggregate_status
+from tippresence import stats
+from tippresence import aggregate_status
 
 from twisted.python import log
 

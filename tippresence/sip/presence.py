@@ -5,9 +5,9 @@ from collections import defaultdict
 
 from twisted.internet import reactor, defer
 
-from tipsip import aggregate_status
-from ua import SIPUA, SIPError
-from header import Header
+from tippresence import aggregate_status
+from tipsip import SIPUA, SIPError
+from tipsip.header import Header
 
 
 s2p = {
