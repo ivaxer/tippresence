@@ -9,6 +9,7 @@ from tipsip.dialog import DialogStore, Dialog
 
 from tippresence.http import HTTPStats, HTTPPresence
 from tippresence.sip import SIPPresence
+from tippresence.amqp import AMQPublisher, AMQFactory
 
 storage = MemoryStorage()
 
@@ -31,4 +32,10 @@ sip_ua = SIPPresence(dialog_store, udp_transport, presence_service)
 
 sip_service = internet.UDPServer(5060, udp_transport)
 sip_service.setServiceParent(application)
+
+creds = {"LOGIN": "guest", "PASSWORD": "guest"}
+amq_factory = AMQFactory(creds, 'tippresence/amqp/amqp0-8.xml')
+amq_publisher = AMQPublisher(amq_factory, presence_service)
+amq_client = internet.TCPClient("ivaxer.tipmeet.com", 5672, amq_factory)
+amq_client.setServiceParent(application)
 
