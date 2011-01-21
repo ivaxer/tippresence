@@ -13,8 +13,8 @@ from tippresence import aggregate_status
 
 
 class AMQPublisher(object):
-    exchange_name = 'presence'
-    routing_key = 'status_changes'
+    exchange_name = ''
+    routing_key = 'presence_changes'
 
     def __init__(self, factory, presence_service):
         presence_service.watch(self.statusChanged)
