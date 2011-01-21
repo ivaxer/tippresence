@@ -98,7 +98,7 @@ class SIPPresence(SIPUA):
             response.headers['allow-event'] = 'presence'
             self.sendResponse(response)
         elif not subscribe.dialog and subscribe.has_totag:
-            raise SIPError(404, 'Not Here')
+            raise SIPError(481, 'Call/Transaction Does Not Exist')
         else:
             yield self.processSubscription(subscribe)
 
