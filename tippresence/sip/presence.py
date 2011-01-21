@@ -91,11 +91,6 @@ class SIPPresence(SIPUA):
         tag = yield self.presence_service.putStatus(resource, presence, expires, tag=tag)
         defer.returnValue(tag)
 
-    def handle_REGISTER(self, register):
-        r = register.createResponse(200, 'OK')
-        r.headers['expires'] = '3600'
-        self.sendResponse(r)
-
     @defer.inlineCallbacks
     def handle_SUBSCRIBE(self, subscribe):
         if subscribe.headers.get('Event') != 'presence':
