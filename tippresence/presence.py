@@ -69,6 +69,7 @@ class PresenceService(object):
         status['expiresat'] = expiresat
         table = self._resourceTable(resource)
         yield self.storage.hset(table, tag, status.serialize())
+        yield self._notifyWatchers(resource)
         self._setStatusTimer(resource, tag, expires)
 
     @defer.inlineCallbacks
