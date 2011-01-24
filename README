@@ -2,5 +2,8 @@ TIPSIP -- SIP-related services
 
 Currently in development.
 
-TODO:
- - Presence server with SIP and RESTful interfaces.
+DEPENDENCIES
+- twisted (http://twistedmatrix.com)
+- tipsip (https://github.com/ivaxer/tipsip)
+- twisted.web (http://twistedmatrix.com)
+- txAMQP (https://launchpad.net/txamqp)
