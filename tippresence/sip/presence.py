@@ -114,7 +114,7 @@ class SIPPresence(SIPUA):
         if not expires and subscribe.dialog:
             watcher = subscribe.dialog.id
             yield self.notifyWatcher(watcher, status='terminated', expires=0)
-            self.removeWatcher(watcher)
+            yield self.removeWatcher(watcher)
         elif subscribe.dialog:
             watcher = subscribe.dialog.id
             self.updateWatcher(watcher, expires)
@@ -142,6 +142,7 @@ class SIPPresence(SIPUA):
             raise SIPError(404, "Not Found")
         tid.reset(expires)
 
+    @defer.inlineCallbacks
     def removeWatcher(self, watcher):
         tid = self.watcher_expires_tid.get(watcher)
         if not tid:
@@ -151,6 +152,7 @@ class SIPPresence(SIPUA):
         self.watcher_expires_tid.pop(watcher)
         if tid.active():
             tid.cancel()
+        yield self.removeDialog(id=watcher)
 
     @defer.inlineCallbacks
     def notifyWatcher(self, watcher, pidf=None, dialog=None, status='active', expires=None):
