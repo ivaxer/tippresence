@@ -146,13 +146,14 @@ class PresenceService(object):
                 active.append((tag, status))
         return active, expired
 
-    def _setStatusTimer(self, resource, tag, delay):
+    def _setStatusTimer(self, resource, tag, delay, memonly=False):
         if (resource, tag) in self._status_timers:
             self._status_timers[resource, tag].reset(delay)
         else:
             stats['presence_active_timers'] += 1
             self._status_timers[resource, tag] = reactor.callLater(delay, self.removeStatus, resource, tag)
-        self._storeStatusTimer(resource, tag, delay)
+        if not memonly:
+            self._storeStatusTimer(resource, tag, delay)
         debug("Set timer: resource = %r, tag = %r, delay = %r" % (resource, tag, delay))
 
     def _cancelStatusTimer(self, resource, tag):
