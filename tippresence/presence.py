@@ -185,20 +185,24 @@ class PresenceService(object):
     @defer.inlineCallbacks
     def _loadStatusTimers(self):
         table = self._timersTable()
-        timers = yield self.storage.hgetall(table)
+        try:
+            timers = yield self.storage.hgetall(table)
+        except KeyError:
+            defer.returnValue(None)
         stale_timers = []
         cur_time = reactor.seconds()
         for key, expiresat in timers.iteritems():
             resource, tag = key.split(':')
+            expiresat = float(expiresat)
             if expiresat < cur_time:
-                self._dropStatusTimer(self, resource, tag)
                 debug("Load timers from storage: resource = %r, tag = %r, expiresat = %r >> status expired" %\
                     (resource, tag, expiresat))
+                self.removeStatus(resource, tag)
             else:
                 delay = expiresat - cur_time
-                self._setStatusTimer(resource, tag, delay)
                 debug("Load timers from storage: resource = %r, tag = %r, expiresat = %r >> set timer" %\
                     (resource, tag, expiresat))
+                self._setStatusTimer(resource, tag, delay, memonly=True)
 
     @defer.inlineCallbacks
     def _notifyWatchers(self, resource, status=None):
