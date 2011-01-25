@@ -5,8 +5,13 @@ import json
 import utils
 
 from twisted.internet import reactor, defer
+from twisted.python import log
 
 from tippresence import stats
+
+def debug(msg):
+    if __debug__:
+        log.msg(msg)
 
 def aggregate_status(statuses):
     max_priority = None
@@ -43,7 +48,6 @@ class PresenceService(object):
 
     @defer.inlineCallbacks
     def putStatus(self, resource, pdoc, expires, priority=0, tag=None):
-        stats['presence_put_statuses'] += 1
         if not tag:
             tag = utils.random_str(10)
         expiresat = expires + utils.seconds()
@@ -55,11 +59,13 @@ class PresenceService(object):
         d3 = self._notifyWatchers(resource)
         yield defer.DeferredList([d1, d2, d3])
         self._setStatusTimer(resource, tag, expires)
+        stats['presence_put_statuses'] += 1
+        log.msg("Put status: resource = %r, tag = %r, presence document = %r, expires = %r, priority = %r" %\
+                (resource, tag, pdoc, expires, priority))
         defer.returnValue(tag)
 
     @defer.inlineCallbacks
     def updateStatus(self, resource, tag, expires):
-        stats['presence_updated_statuses'] += 1
         r = yield self.getStatus(resource, tag)
         if r:
             _, status = r[0]
@@ -71,6 +77,8 @@ class PresenceService(object):
         yield self.storage.hset(table, tag, status.serialize())
         yield self._notifyWatchers(resource)
         self._setStatusTimer(resource, tag, expires)
+        stats['presence_updated_statuses'] += 1
+        log.msg("Update status: resource = %r, tag = %r, expires = %r" % (resource, tag, expires))
 
     @defer.inlineCallbacks
     def getStatus(self, resource, tag=None):
@@ -83,23 +91,26 @@ class PresenceService(object):
             else:
                 r = yield self.storage.hgetall(table)
         except KeyError:
+            log.msg("Get status: resource = %r, tag = %r >> not found" % (resource, tag))
             defer.returnValue([])
         statuses = [(tag, Status.parse(x)) for (tag,  x) in r.iteritems()]
         active, expired = self._splitExpiredStatuses(statuses)
         if expired:
-            self._log("Expired statuses of resource '%s' found: %s" % (resource, expired))
+            log.msg("Expired statuses found >> resource: %r, expired statuses: %r" % (resource, expired))
             for tag, _ in expired:
                 self.removeStatus(resource, tag)
+        debug("Get status: resource = %r, tag = %r >> %r" % (resource, tag, active))
         defer.returnValue(active)
 
     @defer.inlineCallbacks
     def dumpStatuses(self):
-        stats['presence_dumped_statuses'] += 1
         rset = self._resourcesSet()
         all_resources = yield self.storage.sgetall(rset)
         result = {}
+        debug("Dump all statuses...")
         for resource in all_resources:
             result[resource] = yield self.getStatus(resource)
+        stats['presence_dumped_statuses'] += 1
         defer.returnValue(result)
 
     @defer.inlineCallbacks
@@ -113,11 +124,12 @@ class PresenceService(object):
                 rset = self._resourcesSet()
                 yield self.storage.srem(rset, resource)
         except KeyError, e:
-            self._log('Storage error: %s' % (e,))
             self._cancelStatusTimer(resource, tag)
+            log.msg("Remove status: resource = %r, tag = %r >> not found" % (resource, tag))
             defer.returnValue("not_found")
         self._cancelStatusTimer(resource, tag)
         yield self._notifyWatchers(resource)
+        log.msg("Remove status: resource = %r, tag = %r >> removed" % (resource, tag))
         defer.returnValue("ok")
 
     def watch(self, callback, *args, **kwargs):
@@ -141,6 +153,7 @@ class PresenceService(object):
             stats['presence_active_timers'] += 1
             self._status_timers[resource, tag] = reactor.callLater(delay, self.removeStatus, resource, tag)
         self._storeStatusTimer(resource, tag, delay)
+        debug("Set timer: resource = %r, tag = %r, delay = %r" % (resource, tag, delay))
 
     def _cancelStatusTimer(self, resource, tag):
         if (resource, tag) in self._status_timers:
@@ -149,8 +162,9 @@ class PresenceService(object):
             if timer.active():
                 timer.cancel()
             self._dropStatusTimer(resource, tag)
-        else:
-            self._log("Timer (%s, %s) already deleted" % (resource, tag))
+            debug("Cancel timer: resource = %r, tag = %r >> removed" % (resource, tag))
+        else :
+            debug("Cancel timer: resource = %r, tag = %r >> not found" % (resource, tag))
 
     @defer.inlineCallbacks
     def _storeStatusTimer(self, resource, tag, delay):
@@ -158,6 +172,8 @@ class PresenceService(object):
         key = '%s:%s' % (resource, tag)
         expiresat = utils.seconds() + delay
         yield self.storage.hset(table, key, expiresat)
+        debug("Store timer to storage: resource = %r, tag = %r, delay = %r" %\
+                (resource, tag, delay))
 
     @defer.inlineCallbacks
     def _dropStatusTimer(self, resource, tag):
@@ -175,9 +191,13 @@ class PresenceService(object):
             resource, tag = key.split(':')
             if expiresat < cur_time:
                 self._dropStatusTimer(self, resource, tag)
+                debug("Load timers from storage: resource = %r, tag = %r, expiresat = %r >> status expired" %\
+                    (resource, tag, expiresat))
             else:
                 delay = expiresat - cur_time
                 self._setStatusTimer(resource, tag, delay)
+                debug("Load timers from storage: resource = %r, tag = %r, expiresat = %r >> set timer" %\
+                    (resource, tag, expiresat))
 
     @defer.inlineCallbacks
     def _notifyWatchers(self, resource):
@@ -193,9 +213,4 @@ class PresenceService(object):
 
     def _resourcesSet(self):
         return 'sys:resources'
-
-    def _log(self, *args, **kw):
-        kw['system'] = 'presence'
-        utils.msg(*args, **kw)
-
 
