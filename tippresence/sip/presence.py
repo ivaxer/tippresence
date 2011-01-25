@@ -43,6 +43,7 @@ class SIPPresence(SIPUA):
 
     def __init__(self, storage, dialog_store, transport, presence_service):
         SIPUA.__init__(self, dialog_store, transport)
+        storage.addCallbackOnConnected(self._loadWatcherTimers)
         self.storage = storage
         presence_service.watch(self.statusChangedCallback)
         self.presence_service = presence_service
