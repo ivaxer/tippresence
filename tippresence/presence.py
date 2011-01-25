@@ -50,7 +50,7 @@ class PresenceService(object):
     def putStatus(self, resource, pdoc, expires, priority=0, tag=None):
         if not tag:
             tag = utils.random_str(10)
-        expiresat = expires + utils.seconds()
+        expiresat = expires + reactor.seconds()
         table = self._resourceTable(resource)
         rset = self._resourcesSet()
         status = Status(pdoc, expiresat, priority)
@@ -71,7 +71,7 @@ class PresenceService(object):
             _, status = r[0]
         else:
             defer.returnValue('not_found')
-        expiresat = expires + utils.seconds()
+        expiresat = expires + reactor.seconds()
         status['expiresat'] = expiresat
         table = self._resourceTable(resource)
         yield self.storage.hset(table, tag, status.serialize())
@@ -138,7 +138,7 @@ class PresenceService(object):
     def _splitExpiredStatuses(self, statuses):
         active = []
         expired = []
-        cur_time = utils.seconds()
+        cur_time = reactor.seconds()
         for tag, status in statuses:
             if status['expiresat'] < cur_time:
                 expired.append((tag, status))
@@ -170,7 +170,7 @@ class PresenceService(object):
     def _storeStatusTimer(self, resource, tag, delay):
         table = self._timersTable()
         key = '%s:%s' % (resource, tag)
-        expiresat = utils.seconds() + delay
+        expiresat = reactor.seconds() + delay
         yield self.storage.hset(table, key, expiresat)
         debug("Store timer to storage: resource = %r, tag = %r, delay = %r" %\
                 (resource, tag, delay))
@@ -186,7 +186,7 @@ class PresenceService(object):
         table = self._timersTable()
         timers = yield self.storage.hgetall(table)
         stale_timers = []
-        cur_time = utils.seconds()
+        cur_time = reactor.seconds()
         for key, expiresat in timers.iteritems():
             resource, tag = key.split(':')
             if expiresat < cur_time:
