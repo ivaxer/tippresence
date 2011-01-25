@@ -75,7 +75,7 @@ class PresenceService(object):
         status['expiresat'] = expiresat
         table = self._resourceTable(resource)
         yield self.storage.hset(table, tag, status.serialize())
-        yield self._notifyWatchers(resource)
+        yield self._notifyWatchers(resource, status=r)
         self._setStatusTimer(resource, tag, expires)
         stats['presence_updated_statuses'] += 1
         log.msg("Update status: resource = %r, tag = %r, expires = %r" % (resource, tag, expires))
@@ -200,8 +200,9 @@ class PresenceService(object):
                     (resource, tag, expiresat))
 
     @defer.inlineCallbacks
-    def _notifyWatchers(self, resource):
-        status = yield self.getStatus(resource)
+    def _notifyWatchers(self, resource, status=None):
+        if not status:
+            status = yield self.getStatus(resource)
         for callback, arg, kw in self._callbacks:
             callback(resource, status, *arg, **kw)
 
