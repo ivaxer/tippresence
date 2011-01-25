@@ -117,17 +117,17 @@ class PresenceService(object):
     def removeStatus(self, resource, tag):
         stats['presence_removed_statuses'] += 1
         table = self._resourceTable(resource)
+        self._cancelStatusTimer(resource, tag)
         try:
             yield self.storage.hdel(table, tag)
-            statuses = yield self.storage.hgetall(table)
-            if not statuses:
-                rset = self._resourcesSet()
-                yield self.storage.srem(rset, resource)
         except KeyError, e:
-            self._cancelStatusTimer(resource, tag)
             log.msg("Remove status: resource = %r, tag = %r >> not found" % (resource, tag))
             defer.returnValue("not_found")
-        self._cancelStatusTimer(resource, tag)
+        try:
+            yield self.storage.hgetall(table)
+        except KeyError:
+            rset = self._resourcesSet()
+            yield self.storage.srem(rset, resource)
         yield self._notifyWatchers(resource)
         log.msg("Remove status: resource = %r, tag = %r >> removed" % (resource, tag))
         defer.returnValue("ok")
