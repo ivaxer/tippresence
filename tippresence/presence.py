@@ -42,6 +42,7 @@ class Status(dict):
 
 class PresenceService(object):
     def __init__(self, storage):
+        storage.addCallbackOnConnected(self._loadStatusTimers)
         self.storage = storage
         self._callbacks = []
         self._status_timers = {}
