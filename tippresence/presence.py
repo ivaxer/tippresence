@@ -210,7 +210,7 @@ class PresenceService(object):
         return 'res:' + resource
 
     def _timersTable(self):
-        return 'sys:timers'
+        return 'sys:status_timers'
 
     def _resourcesSet(self):
         return 'sys:resources'
