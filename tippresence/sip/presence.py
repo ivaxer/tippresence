@@ -35,15 +35,17 @@ def status2pidf(resource, statuses):
 class SIPPresence(SIPUA):
     DEFAULT_PUBLISH_EXPIRES = 3600
     MIN_PUBLISH_EXPIRES = 60
+    WATCHERS_SET_NAME = 'sys:watchers_by_resource:%s'
+    RESOURCE_BY_WATCHER = 'sys:resource_by_watcher'
+    WATCHER_TIMERS = 'sys:watcher_timers'
 
     online_re = re.compile('.*<status><basic>open</basic></status>.*')
 
-    def __init__(self, dialog_store, transport, presence_service):
+    def __init__(self, storage, dialog_store, transport, presence_service):
         SIPUA.__init__(self, dialog_store, transport)
+        self.storage = storage
         presence_service.watch(self.statusChangedCallback)
         self.presence_service = presence_service
-        self.watchers_by_resource = defaultdict(list)
-        self.resource_by_watcher = {}
         self.watcher_expires_tid = {}
 
     @defer.inlineCallbacks
@@ -102,10 +104,12 @@ class SIPPresence(SIPUA):
         else:
             yield self.processSubscription(subscribe)
 
+    @defer.inlineCallbacks
     def statusChangedCallback(self, resource, status):
-        if resource not in self.watchers_by_resource:
+        watchers = yield self._getResourceWatchers(resource)
+        if not watchers:
             return
-        for watcher in self.watchers_by_resource[resource]:
+        for watcher in watchers:
             self.notifyWatcher(watcher)
 
     @defer.inlineCallbacks
@@ -117,47 +121,44 @@ class SIPPresence(SIPUA):
             yield self.removeWatcher(watcher)
         elif subscribe.dialog:
             watcher = subscribe.dialog.id
-            self.updateWatcher(watcher, expires)
-            self.notifyWatcher(watcher, status='active', expires=expires, dialog=subscribe.dialog)
+            yield self.updateWatcher(watcher, expires)
+            yield self.notifyWatcher(watcher, status='active', expires=expires, dialog=subscribe.dialog)
         else:
             if not subscribe.ruri.user:
                 raise SIPError(404, 'Bad resource URI')
             resource = subscribe.ruri.user + '@' + subscribe.ruri.host
             yield self.createDialog(subscribe)
             watcher = subscribe.dialog.id
-            self.addWatcher(watcher, resource, expires)
-            self.notifyWatcher(watcher, status='active', expires=expires, dialog=subscribe.dialog)
+            yield self.addWatcher(watcher, resource, expires)
+            yield self.notifyWatcher(watcher, status='active', expires=expires, dialog=subscribe.dialog)
         response = subscribe.createResponse(200, 'OK')
         response.headers['Expires'] = str(expires)
         self.sendResponse(response)
 
+    @defer.inlineCallbacks
     def addWatcher(self, watcher, resource, expires):
-        self.watchers_by_resource[resource].append(watcher)
-        self.resource_by_watcher[watcher] = resource
-        self.watcher_expires_tid[watcher] = reactor.callLater(expires, self.removeWatcher, watcher)
+        yield self._addResourceWatcher(resource, watcher)
+        yield self._setWatcherTimer(watcher, expires)
 
+    @defer.inlineCallbacks
     def updateWatcher(self, watcher, expires):
-        tid = self.watcher_expires_tid.get(watcher)
-        if not tid:
-            raise SIPError(404, "Not Found")
-        tid.reset(expires)
+        if watcher not in self.watcher_expires_tid:
+            raise SIPError(500, "Server Internal Error")
+        yield self._setWatcherTimer(watcher, expires)
 
     @defer.inlineCallbacks
     def removeWatcher(self, watcher):
-        tid = self.watcher_expires_tid.get(watcher)
-        if not tid:
+        if watcher not in self.watcher_expires_tid:
             raise SIPError(404, 'Not Found')
-        resource = self.resource_by_watcher.pop(watcher)
-        self.watchers_by_resource[resource].remove(watcher)
-        self.watcher_expires_tid.pop(watcher)
-        if tid.active():
-            tid.cancel()
+        resource = yield self._getResourceByWatcher(watcher)
+        yield self._removeResourceWatcher(resource, watcher)
         yield self.removeDialog(id=watcher)
+        yield self._cancelWatcherTimer(watcher)
 
     @defer.inlineCallbacks
     def notifyWatcher(self, watcher, pidf=None, dialog=None, status='active', expires=None):
         if pidf is None:
-            resource = self.resource_by_watcher[watcher]
+            resource = yield self._getResourceByWatcher(watcher)
             statuses = yield self.presence_service.getStatus(resource)
             pidf = status2pidf(resource, statuses)
         if dialog is None:
@@ -178,4 +179,69 @@ class SIPPresence(SIPUA):
         h['Event'] = 'presence'
         notify.content = pidf
         yield self.sendRequest(notify)
+
+    @defer.inlineCallbacks
+    def _getResourceWatchers(self, resource):
+        s = self.WATCHERS_SET_NAME % resource
+        try:
+            watchers = yield self.storage.sgetall(s)
+        except KeyError:
+            defer.returnValue(None)
+        r = [tuple(w.split(':')) for w in watchers]
+        defer.returnValue(r)
+
+    @defer.inlineCallbacks
+    def _addResourceWatcher(self, resource, watcher):
+        w = ':'.join(watcher)
+        s = self.WATCHERS_SET_NAME % resource
+        yield self.storage.sadd(s, w)
+        yield self.storage.hset(self.RESOURCE_BY_WATCHER, w, resource)
+
+    @defer.inlineCallbacks
+    def _removeResourceWatcher(self, resource, watcher):
+        s = self.WATCHERS_SET_NAME % resource
+        w = ':'.join(watcher)
+        yield self.storage.srem(s, w)
+        yield self.storage.hdel(self.RESOURCE_BY_WATCHER, w)
+
+    @defer.inlineCallbacks
+    def _getResourceByWatcher(self, watcher):
+        w = ':'.join(watcher)
+        r = yield self.storage.hget(self.RESOURCE_BY_WATCHER, w)
+        defer.returnValue(r)
+
+    @defer.inlineCallbacks
+    def _setWatcherTimer(self, watcher, delay, memonly=False):
+        if watcher in self.watcher_expires_tid:
+            self.watcher_expires_tid[watcher].reset(delay)
+        else:
+            self.watcher_expires_tid[watcher] = reactor.callLater(delay, self.removeWatcher, watcher)
+        if not memonly:
+            w = ':'.join(watcher)
+            expiresat = reactor.seconds() + delay
+            yield self.storage.hset(self.WATCHER_TIMERS, w, expiresat)
+
+    @defer.inlineCallbacks
+    def _cancelWatcherTimer(self, watcher):
+        if watcher not in self.watcher_expires_tid:
+            defer.returnValue(None)
+        w = ':'.join(watcher)
+        yield self.storage.hdel(self.WATCHER_TIMERS, w)
+        tid = self.watcher_expires_tid.pop(watcher)
+        if tid.active():
+            tid.cancel()
+
+    @defer.inlineCallbacks
+    def _loadWatcherTimers(self):
+        try:
+            timers = yield self.storage.hgetall(self.WATCHER_TIMERS)
+        except KeyError:
+            defer.returnValue(None)
+        for w, expiresat in timers.iteritems():
+            expires = float(expiresat) - reactor.seconds()
+            if expires <= 0:
+                yield self.storage.hdel(self.WATCHER_TIMERS, w)
+            else:
+                watcher = tuple(w.split(':'))
+                yield self._setWatcherTimer(watcher, expires, memonly=True)
 
