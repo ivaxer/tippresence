@@ -1,4 +1,4 @@
-tippresence - SIP Presence Server on Python
+tippresence - Presence Server (SIP/HTTP/AMQP interfaces) on Twisted Python
 
 Currently in development.
 
