@@ -28,13 +28,13 @@ http_service.setServiceParent(application)
 dialog_store = DialogStore(storage)
 
 udp_transport = UDPTransport(Address('127.0.0.1', 5060, 'UDP'))
-sip_ua = SIPPresence(dialog_store, udp_transport, presence_service)
+sip_ua = SIPPresence(storage, dialog_store, udp_transport, presence_service)
 
 sip_service = internet.UDPServer(5060, udp_transport)
 sip_service.setServiceParent(application)
 
 creds = {"LOGIN": "guest", "PASSWORD": "guest"}
-amq_factory = AMQFactory(creds, 'amqp0-8.xml')
+amq_factory = AMQFactory(creds)
 amq_publisher = AMQPublisher(amq_factory, presence_service)
 amq_client = internet.TCPClient("localhost", 5672, amq_factory)
 amq_client.setServiceParent(application)
