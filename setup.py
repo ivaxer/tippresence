@@ -1,3 +1,5 @@
+#!/usr/bin/env python
+
 from setuptools import setup, find_packages
 
 if __name__ == '__main__':
@@ -18,5 +20,9 @@ if __name__ == '__main__':
             test_suite='tippresence.tests',
             package_data = {
                 'tippresence.amqp': ['amqp0-8.xml'],
-            }
+            },
+
+            data_files = [
+                ('/etc/tippresence', ['tippresence.tac']),
+            ],
     )
