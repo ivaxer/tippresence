@@ -40,7 +40,12 @@ class Status(dict):
         r = json.loads(s)
         return cls(r['presence'], r['expiresat'], r['priority'])
 
+class PresenceServiceError(Exception):
+    pass
+
 class PresenceService(object):
+    MAX_EXPIRE_TIME = 3900
+
     def __init__(self, storage):
         storage.addCallbackOnConnected(self._loadStatusTimers)
         self.storage = storage
@@ -49,6 +54,8 @@ class PresenceService(object):
 
     @defer.inlineCallbacks
     def putStatus(self, resource, pdoc, expires, priority=0, tag=None):
+        if expires > self.MAX_EXPIRE_TIME:
+            raise PresenceServiceError("Expire limit exeeded")
         if not tag:
             tag = utils.random_str(10)
         expiresat = expires + reactor.seconds()
