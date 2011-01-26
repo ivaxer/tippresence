@@ -118,12 +118,12 @@ class SIPPresence(SIPUA):
         expires = int(subscribe.headers['Expires'])
         if not expires and subscribe.dialog:
             watcher = subscribe.dialog.id
-            yield self.notifyWatcher(watcher, status='terminated', expires=0)
+            notify = yield self.createNotify(watcher, status='terminated', expires=0, dialog=subscribe.dialog)
             yield self.removeWatcher(watcher)
         elif subscribe.dialog:
             watcher = subscribe.dialog.id
             yield self.updateWatcher(watcher, expires)
-            yield self.notifyWatcher(watcher, status='active', expires=expires, dialog=subscribe.dialog)
+            notify = yield self.createNotify(watcher, status='active', expires=expires, dialog=subscribe.dialog)
         else:
             if not subscribe.ruri.user:
                 raise SIPError(404, 'Bad resource URI')
@@ -131,10 +131,11 @@ class SIPPresence(SIPUA):
             yield self.createDialog(subscribe)
             watcher = subscribe.dialog.id
             yield self.addWatcher(watcher, resource, expires)
-            yield self.notifyWatcher(watcher, status='active', expires=expires, dialog=subscribe.dialog)
+            notify = yield self.createNotify(watcher, status='active', expires=expires, dialog=subscribe.dialog)
         response = subscribe.createResponse(200, 'OK')
         response.headers['Expires'] = str(expires)
         self.sendResponse(response)
+        yield self.sendRequest(notify)
 
     @defer.inlineCallbacks
     def addWatcher(self, watcher, resource, expires):
@@ -157,7 +158,7 @@ class SIPPresence(SIPUA):
         yield self._cancelWatcherTimer(watcher)
 
     @defer.inlineCallbacks
-    def notifyWatcher(self, watcher, pidf=None, dialog=None, status='active', expires=None):
+    def createNotify(self, watcher, pidf=None, dialog=None, status='active', expires=None):
         if pidf is None:
             resource = yield self._getResourceByWatcher(watcher)
             statuses = yield self.presence_service.getStatus(resource)
@@ -169,16 +170,17 @@ class SIPPresence(SIPUA):
         if expires is None:
             expires = self.watcher_expires_tid[watcher].getTime() - reactor.seconds()
             expires = int(expires)
-        yield self.sendNotify(dialog, pidf, status, expires)
-
-    @defer.inlineCallbacks
-    def sendNotify(self, dialog, pidf, status, expires):
         notify = dialog.createRequest('NOTIFY')
         h = notify.headers
         h['subscription-state'] = Header(status, {'expires': str(expires)})
         h['content-type'] = 'application/pidf+xml'
         h['Event'] = 'presence'
         notify.content = pidf
+        defer.returnValue(notify)
+
+    @defer.inlineCallbacks
+    def notifyWatcher(self, watcher):
+        notify = yield self.createNotify(watcher)
         yield self.sendRequest(notify)
 
     @defer.inlineCallbacks
