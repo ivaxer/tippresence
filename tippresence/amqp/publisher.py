@@ -4,6 +4,8 @@ import json
 
 from twisted.internet import defer, protocol
 
+from pkg_resources import resource_filename
+
 from txamqp.protocol import AMQClient
 from txamqp.client import TwistedDelegate
 from txamqp.content import Content
@@ -11,6 +13,7 @@ import txamqp.spec
 
 from tippresence import aggregate_status
 
+SPECFILE = resource_filename(__name__, 'amqp0-8.xml')
 
 class AMQPublisher(object):
     exchange_name = ''
@@ -30,8 +33,8 @@ class AMQPublisher(object):
 class AMQFactory(protocol.ReconnectingClientFactory):
     VHOST = '/'
 
-    def __init__(self, creds, specpath):
-        self.spec = txamqp.spec.load(specpath)
+    def __init__(self, creds):
+        self.spec = txamqp.spec.load(SPECFILE)
         self.creds = creds
         self.client = None
         self.channel  = None
