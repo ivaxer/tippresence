@@ -3,6 +3,7 @@ tippresence - SIP Presence Server on Python
 Currently in development.
 
 DEPENDENCIES
+- setuptools
 - twisted (http://twistedmatrix.com)
 - tipsip (https://github.com/ivaxer/tipsip)
 - twisted.web (http://twistedmatrix.com)
