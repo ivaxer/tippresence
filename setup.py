@@ -23,6 +23,7 @@ if __name__ == '__main__':
             },
 
             data_files = [
-                ('/etc/tippresence', ['tippresence.tac']),
+                ('/etc/tippresence', ['etc/tippresence/tippresence.tac']),
+                ('/etc/init', ['etc/init/tippresence.conf']),
             ],
     )
