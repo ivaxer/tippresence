@@ -7,6 +7,7 @@ from twisted.web import resource, server
 
 from tippresence import stats
 from tippresence import aggregate_status
+from tippresence import PresenceServiceError
 
 from twisted.python import log
 
@@ -84,6 +85,13 @@ class HTTPPresence(resource.Resource):
             write(r)
             finish()
 
+        def reply_error(failure):
+            failure.trap(PresenceServiceError)
+            msg = failure.getErrorMessage()
+            r = json.dumps({'status': 'failure', 'reason': msg})
+            write(r)
+            finish()
+
         try:
             r = json.load(content)
         except ValueError, e:
@@ -101,6 +109,7 @@ class HTTPPresence(resource.Resource):
             kw['tag'] = tag
         d = self.presence.putStatus(*args, **kw)
         d.addCallback(reply)
+        d.addErrback(reply_error)
         return server.NOT_DONE_YET
 
     def removeStatus(self, write, finish, resource, tag):
