@@ -65,8 +65,8 @@ class PresenceService(object):
         d1 = self.storage.hset(table, tag, status.serialize())
         d2 = self.storage.sadd(rset, resource)
         d3 = self._notifyWatchers(resource)
-        yield defer.DeferredList([d1, d2, d3])
-        self._setStatusTimer(resource, tag, expires)
+        d4 = self._setStatusTimer(resource, tag, expires)
+        yield defer.DeferredList([d1, d2, d3, d4])
         stats['presence_put_statuses'] += 1
         log.msg("Put status: resource = %r, tag = %r, presence document = %r, expires = %r, priority = %r" %\
                 (resource, tag, pdoc, expires, priority))
@@ -82,9 +82,10 @@ class PresenceService(object):
         expiresat = expires + reactor.seconds()
         status['expiresat'] = expiresat
         table = self._resourceTable(resource)
-        yield self.storage.hset(table, tag, status.serialize())
-        yield self._notifyWatchers(resource, status=r)
-        self._setStatusTimer(resource, tag, expires)
+        d1 = self.storage.hset(table, tag, status.serialize())
+        d2 = self._notifyWatchers(resource, status=r)
+        d3 = self._setStatusTimer(resource, tag, expires)
+        yield defer.DeferredList([d1, d2, d3])
         stats['presence_updated_statuses'] += 1
         log.msg("Update status: resource = %r, tag = %r, expires = %r" % (resource, tag, expires))
 
@@ -125,7 +126,7 @@ class PresenceService(object):
     def removeStatus(self, resource, tag):
         stats['presence_removed_statuses'] += 1
         table = self._resourceTable(resource)
-        self._cancelStatusTimer(resource, tag)
+        yield self._cancelStatusTimer(resource, tag)
         try:
             yield self.storage.hdel(table, tag)
         except KeyError, e:
@@ -154,6 +155,7 @@ class PresenceService(object):
                 active.append((tag, status))
         return active, expired
 
+    @defer.inlineCallbacks
     def _setStatusTimer(self, resource, tag, delay, memonly=False):
         if (resource, tag) in self._status_timers:
             self._status_timers[resource, tag].reset(delay)
@@ -161,17 +163,18 @@ class PresenceService(object):
             stats['presence_active_timers'] += 1
             self._status_timers[resource, tag] = reactor.callLater(delay, self.removeStatus, resource, tag)
         if not memonly:
-            self._storeStatusTimer(resource, tag, delay)
         debug("Set timer: resource = %r, tag = %r, delay = %r" % (resource, tag, delay))
+            yield self._storeStatusTimer(resource, tag, delay)
 
+    @defer.inlineCallbacks
     def _cancelStatusTimer(self, resource, tag):
         if (resource, tag) in self._status_timers:
             stats['presence_active_timers'] -= 1
             timer = self._status_timers.pop((resource, tag))
             if timer.active():
                 timer.cancel()
-            self._dropStatusTimer(resource, tag)
             debug("Cancel timer: resource = %r, tag = %r >> removed" % (resource, tag))
+            yield self._dropStatusTimer(resource, tag)
         else :
             debug("Cancel timer: resource = %r, tag = %r >> not found" % (resource, tag))
 
@@ -210,7 +213,7 @@ class PresenceService(object):
                 delay = expiresat - cur_time
                 debug("Load timers from storage: resource = %r, tag = %r, expiresat = %r >> set timer" %\
                     (resource, tag, expiresat))
-                self._setStatusTimer(resource, tag, delay, memonly=True)
+                yield self._setStatusTimer(resource, tag, delay, memonly=True)
 
     @defer.inlineCallbacks
     def _notifyWatchers(self, resource, status=None):
