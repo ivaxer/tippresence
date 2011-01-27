@@ -68,7 +68,7 @@ class PresenceService(object):
         d4 = self._setStatusTimer(resource, tag, expires)
         yield defer.DeferredList([d1, d2, d3, d4])
         stats['presence_put_statuses'] += 1
-        log.msg("Put status: resource = %r, tag = %r, presence document = %r, expires = %r, priority = %r" %\
+        log.msg("Put status (resource: %r, tag: %r, presence document: %r, expires: %r, priority: %r) ==> result: ok" %\
                 (resource, tag, pdoc, expires, priority))
         defer.returnValue(tag)
 
@@ -87,7 +87,7 @@ class PresenceService(object):
         d3 = self._setStatusTimer(resource, tag, expires)
         yield defer.DeferredList([d1, d2, d3])
         stats['presence_updated_statuses'] += 1
-        log.msg("Update status: resource = %r, tag = %r, expires = %r" % (resource, tag, expires))
+        log.msg("Update status (resource: %r, tag: %r, expires: %r) ==> result: ok" % (resource, tag, expires))
 
     @defer.inlineCallbacks
     def getStatus(self, resource, tag=None):
@@ -100,15 +100,15 @@ class PresenceService(object):
             else:
                 r = yield self.storage.hgetall(table)
         except KeyError:
-            log.msg("Get status: resource = %r, tag = %r >> not found" % (resource, tag))
+            log.msg("Get status (resource: %r, tag: %r) ==> result: not found" % (resource, tag))
             defer.returnValue([])
-        statuses = [(tag, Status.parse(x)) for (tag,  x) in r.iteritems()]
+        statuses = [(t, Status.parse(x)) for (t,  x) in r.iteritems()]
         active, expired = self._splitExpiredStatuses(statuses)
         if expired:
-            log.msg("Expired statuses found >> resource: %r, expired statuses: %r" % (resource, expired))
-            for tag, _ in expired:
-                self.removeStatus(resource, tag)
-        debug("Get status: resource = %r, tag = %r >> %r" % (resource, tag, active))
+            debug("Get status (resource: %r, tag: %r) ==> expired statuses found: %r" % (resource, tag, expired))
+            for t, _ in expired:
+                self.removeStatus(resource, t)
+        log.msg("Get status (resource: %r, tag: %r) ==> result: %r" % (resource, tag, active))
         defer.returnValue(active)
 
     @defer.inlineCallbacks
@@ -130,7 +130,7 @@ class PresenceService(object):
         try:
             yield self.storage.hdel(table, tag)
         except KeyError, e:
-            log.msg("Remove status: resource = %r, tag = %r >> not found" % (resource, tag))
+            log.msg("Remove status (resource: %r, tag: %r) ==> result: not found" % (resource, tag))
             defer.returnValue("not_found")
         try:
             yield self.storage.hgetall(table)
@@ -138,7 +138,7 @@ class PresenceService(object):
             rset = self._resourcesSet()
             yield self.storage.srem(rset, resource)
         yield self._notifyWatchers(resource)
-        log.msg("Remove status: resource = %r, tag = %r >> removed" % (resource, tag))
+        log.msg("Remove status (resource: %r, tag: %r) ==> result: ok" % (resource, tag))
         defer.returnValue("ok")
 
     def watch(self, callback, *args, **kwargs):
@@ -163,8 +163,8 @@ class PresenceService(object):
             stats['presence_active_timers'] += 1
             self._status_timers[resource, tag] = reactor.callLater(delay, self.removeStatus, resource, tag)
         if not memonly:
-        debug("Set timer: resource = %r, tag = %r, delay = %r" % (resource, tag, delay))
             yield self._storeStatusTimer(resource, tag, delay)
+        debug("Set status timer (resource: %r, tag: %r, delay: %r) ==> result: ok" % (resource, tag, delay))
 
     @defer.inlineCallbacks
     def _cancelStatusTimer(self, resource, tag):
@@ -173,10 +173,10 @@ class PresenceService(object):
             timer = self._status_timers.pop((resource, tag))
             if timer.active():
                 timer.cancel()
-            debug("Cancel timer: resource = %r, tag = %r >> removed" % (resource, tag))
             yield self._dropStatusTimer(resource, tag)
+            debug("Cancel status timer (resource: %r, tag: %r) ==> result: ok" % (resource, tag))
         else :
-            debug("Cancel timer: resource = %r, tag = %r >> not found" % (resource, tag))
+            debug("Cancel status timer (resource: %r, tag: %r) ==> result: not found" % (resource, tag))
 
     @defer.inlineCallbacks
     def _storeStatusTimer(self, resource, tag, delay):
@@ -184,7 +184,7 @@ class PresenceService(object):
         key = '%s:%s' % (resource, tag)
         expiresat = reactor.seconds() + delay
         yield self.storage.hset(table, key, expiresat)
-        debug("Store timer to storage: resource = %r, tag = %r, delay = %r" %\
+        debug("Store status timer to storage (resource: %r, tag: %r, delay: %r) ==> result: ok" %\
                 (resource, tag, delay))
 
     @defer.inlineCallbacks
@@ -192,10 +192,13 @@ class PresenceService(object):
         table = self._timersTable()
         key = '%s:%s' % (resource, tag)
         yield self.storage.hdel(table, key)
+        debug("Remove status timer from storage (resource: %r, tag: %r) ==> result: ok" %\
+                (resource, tag))
 
     @defer.inlineCallbacks
     def _loadStatusTimers(self):
         table = self._timersTable()
+        debug("Start loading status timers")
         try:
             timers = yield self.storage.hgetall(table)
         except KeyError:
@@ -206,14 +209,15 @@ class PresenceService(object):
             resource, tag = key.split(':')
             expiresat = float(expiresat)
             if expiresat < cur_time:
-                debug("Load timers from storage: resource = %r, tag = %r, expiresat = %r >> status expired" %\
+                debug("Load status timers from storage (resource: %r, tag: %r, expires at: %r) ==> expired" %\
                     (resource, tag, expiresat))
                 self.removeStatus(resource, tag)
             else:
                 delay = expiresat - cur_time
-                debug("Load timers from storage: resource = %r, tag = %r, expiresat = %r >> set timer" %\
+                debug("Load status timers from storage (resource: %r, tag: %r, expires at: %r) ==> set timer" %\
                     (resource, tag, expiresat))
                 yield self._setStatusTimer(resource, tag, delay, memonly=True)
+        debug("Loading status timers ==> ok")
 
     @defer.inlineCallbacks
     def _notifyWatchers(self, resource, status=None):
