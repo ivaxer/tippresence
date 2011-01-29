@@ -8,6 +8,7 @@ from twisted.python.logfile import DailyLogFile
 from tippresence import PresenceService
 from tipsip.storage import MemoryStorage
 from tipsip.transport import Address, UDPTransport
+from tipsip.transaction import TransactionLayer
 from tipsip.dialog import DialogStore, Dialog
 
 from tippresence.http import HTTPStats, HTTPPresence
@@ -29,7 +30,8 @@ http_service.setServiceParent(application)
 
 dialog_store = DialogStore(storage)
 udp_transport = UDPTransport(Address('127.0.0.1', 5060, 'UDP'))
-sip_ua = SIPPresence(storage, dialog_store, udp_transport, presence_service)
+transaction_layer = TransactionLayer(udp_transport)
+sip_ua = SIPPresence(storage, dialog_store, udp_transport, transaction_layer, presence_service)
 sip_service = internet.UDPServer(5060, udp_transport)
 sip_service.setServiceParent(application)
 
@@ -39,6 +41,6 @@ amq_publisher = AMQPublisher(amq_factory, presence_service)
 amq_client = internet.TCPClient("localhost", 5672, amq_factory)
 amq_client.setServiceParent(application)
 
-logfile = DailyLogFile("presence.log", "/var/log/tippresence/")
+logfile = DailyLogFile("presence.log", "/tmp/tippresence/")
 application.setComponent(ILogObserver, FileLogObserver(logfile).emit)
 

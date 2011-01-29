@@ -41,8 +41,8 @@ class SIPPresence(SIPUA):
 
     online_re = re.compile('.*<status><basic>open</basic></status>.*')
 
-    def __init__(self, storage, dialog_store, transport, presence_service):
-        SIPUA.__init__(self, dialog_store, transport)
+    def __init__(self, storage, dialog_store, transport, transaction_layer, presence_service):
+        SIPUA.__init__(self, dialog_store, transport, transaction_layer)
         storage.addCallbackOnConnected(self._loadWatcherTimers)
         self.storage = storage
         presence_service.watch(self.statusChangedCallback)
